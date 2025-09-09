@@ -1,0 +1,776 @@
+<!DOCTYPE html><html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>binauraler - amir_hmn</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+  <script src="https://unpkg.com/feather-icons"></script>
+  <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
+  <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+  <!-- متادیتا و کاور -->
+  <script src="https://unpkg.com/music-metadata-browser/dist/music-metadata-browser.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#dc2626',
+            dark: '#0f172a',
+            darkLight: '#1e293b',
+            light: '#e2e8f0',
+            accent: '#ef4444'
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@100;200;300;400;500;600;700;800;900&display=swap');
+
+    * { font-family: 'Vazirmatn', Tahoma, Arial, sans-serif; }
+
+    .music-player {
+      background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      border: 1px solid rgba(220, 38, 38, 0.2);
+    }
+
+    .progress-bar {
+      height: 6px;
+      background: rgba(220, 38, 38, 0.2);
+      border-radius: 3px;
+      overflow: hidden;
+      position: relative;
+      cursor: pointer;
+      user-select: none;
+    }
+    .progress { height: 100%; background: #dc2626; width: 0%; transition: width 0.1s linear; }
+    .progress-handle {
+      position: absolute; top: 50%; transform: translate(-50%, -50%);
+      width: 12px; height: 12px; border-radius: 9999px; background: #ef4444;
+      box-shadow: 0 0 0 2px rgba(220,38,38,0.35); display: none;
+    }
+    .progress-bar.scrubbing .progress-handle { display: block; }
+
+    .rotating-element { animation: rotate 10s linear infinite; }
+    .rotating-paused { animation-play-state: paused; }
+    @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+    .glowing-border { box-shadow: 0 0 5px rgba(220, 38, 38, 0.5); }
+
+    /* Range RTL fill from right */
+    input[type="range"] {
+      -webkit-appearance: none;
+      height: 8px; background: rgba(220, 38, 38, 0.2);
+      border-radius: 5px;
+      background-image: linear-gradient(#dc2626, #dc2626);
+      background-repeat: no-repeat;
+      background-size: 0% 100%;
+      background-position: right center;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      height: 20px; width: 20px; border-radius: 50%;
+      background: #dc2626; cursor: pointer; box-shadow: 0 0 2px 0 #555;
+      transition: background .3s ease-in-out;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover {
+      background: #ef4444; box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.3);
+    }
+    input[type="range"]::-webkit-slider-runnable-track  { -webkit-appearance: none; background: transparent; }
+
+    .file-upload { border: 2px dashed rgba(220, 38, 38, 0.4); transition: all 0.3s ease; }
+    .file-upload:hover { border-color: #dc2626; background: rgba(220, 38, 38, 0.05); }
+
+    .visualizer {
+      height: 60px; display: flex; align-items: flex-end; justify-content: center; gap: 3px;
+    }
+    .bar {
+      width: 4px; background: #dc2626; border-radius: 2px; height: 10px;
+      animation-duration: 0.5s; animation-iteration-count: infinite; animation-direction: alternate; animation-timing-function: ease-in-out;
+    }
+
+    @media (max-width: 768px) { .controls-grid { grid-template-columns: 1fr !important; } }
+
+    /* کاور دیسک */
+    .cover-img { width: 100%; height: 100%; border-radius: 9999px; object-fit: cover; }
+  </style>
+</head>
+
+<body class="bg-dark text-light min-h-screen flex items-center justify-center p-4">
+  <div class="container max-w-4xl mx-auto">
+
+    <div class="text-center mb-8" data-aos="fade-down">
+      <h1 class="text-3xl md:text-4xl font-bold text-primary mb-2">binauraler - amir_hmn</h1>
+      <p class="text-light/80">تجربه صوتی سه بعدی </p>
+    </div>
+
+    <div class="music-player rounded-2xl p-6 mb-8" data-aos="fade-up">
+      <div class="flex flex-col md:flex-row items-center gap-6 mb-6">
+        <div class="flex-shrink-0">
+          <div class="w-24 h-24 rounded-full bg-darkLight flex items-center justify-center rotating-element rotating-paused overflow-hidden" id="disc">
+            <img id="cover-art" class="cover-img hidden" alt="cover">
+            <i id="disc-icon" data-feather="disc" class="text-primary w-12 h-12"></i>
+          </div>
+        </div>
+
+        <div class="flex-grow text-center md:text-right w-full">
+          <h3 class="text-xl font-semibold mb-1" id="track-name">فایل انتخاب نشده</h3>
+          <p class="text-light/60 text-sm mb-2" id="track-sub">برای شروع یک فایل صوتی انتخاب کنید</p>
+
+          <div class="flex items-center justify-center gap-2 mb-2">
+            <span class="text-sm" id="currentTime">0:00</span>
+            <div class="progress-bar flex-grow mx-2" id="progressBar" title="برای جابه‌جایی کلیک/درگ کنید">
+              <div class="progress" id="progress"></div>
+              <div class="progress-handle" id="progressHandle"></div>
+            </div>
+            <span class="text-sm" id="duration">0:00</span>
+          </div>
+
+          <!-- اکولایزر همیشه فعال: نمایش دائمی -->
+          <div class="visualizer mb-4" id="visualizer">
+            <div class="bar" style="animation-name: v1; animation-delay: 0s;"></div>
+            <div class="bar" style="animation-name: v2; animation-delay: 0.1s;"></div>
+            <div class="bar" style="animation-name: v3; animation-delay: 0.2s;"></div>
+            <div class="bar" style="animation-name: v4; animation-delay: 0.3s;"></div>
+            <div class="bar" style="animation-name: v5; animation-delay: 0.4s;"></div>
+            <div class="bar" style="animation-name: v4; animation-delay: 0.3s;"></div>
+            <div class="bar" style="animation-name: v3; animation-delay: 0.2s;"></div>
+            <div class="bar" style="animation-name: v2; animation-delay: 0.1s;"></div>
+            <div class="bar" style="animation-name: v1; animation-delay: 0s;"></div>
+          </div>
+
+          <div class="flex items-center justify-center gap-3">
+            <button id="playBtn" title="پخش/توقف موقت" disabled class="bg-primary hover:bg-accent text-white rounded-full p-4 transition-all transform hover:scale-105">
+              <i data-feather="play" class="w-6 h-6"></i>
+            </button>
+
+            <button id="stopBtn" title="توقف" disabled class="bg-darkLight hover:bg-red-900 text-white rounded-full p-3 transition-all">
+              <i data-feather="square" class="w-5 h-5"></i>
+            </button>
+
+            <button id="downloadBtn" title="دانلود خروجی 3D" disabled class="bg-darkLight hover:bg-red-900 text-white rounded-full p-3 transition-all" >
+              <i data-feather="download" class="w-5 h-5"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8" data-aos="fade-up" data-aos-delay="100">
+      <div class="file-upload rounded-xl p-6 bg-darkLight border-2 border-dashed text-center" id="uploadBox">
+        <div id="upload-empty" class="flex flex-col items-center justify-center">
+          <i data-feather="upload-cloud" class="w-12 h-12 text-primary mb-3"></i>
+          <p class="mb-4">فایل صوتی خود را انتخاب کنید (MP3, WAV, OGG)</p>
+        </div>
+
+        <div id="upload-preview" class="hidden text-right">
+          <div class="flex items-center gap-3 mb-3">
+            <div class="w-14 h-14 rounded-lg overflow-hidden bg-dark flex items-center justify-center">
+              <img id="preview-cover" class="w-full h-full object-cover hidden" alt="cover">
+              <i id="preview-icon" data-feather="music" class="text-primary w-6 h-6"></i>
+            </div>
+            <div class="flex-1">
+              <div id="preview-title" class="font-semibold text-light">—</div>
+              <div id="preview-artist" class="text-sm text-light/70">—</div>
+            </div>
+          </div>
+        </div>
+
+        <label for="file" class="cursor-pointer bg-primary hover:bg-accent text-white px-4 py-2 rounded-lg transition-colors inline-block">
+          انتخاب فایل
+          <input id="file" type="file" accept="audio/*" class="hidden">
+        </label>
+        <p class="text-sm text-light/60 mt-2" id="file-name">هیچ فایلی انتخاب نشده</p>
+      </div>
+
+      <div class="bg-darkLight rounded-xl p-6">
+        <h3 class="text-lg font-semibold mb-4 border-b border-red-800/30 pb-2 flex items-center">
+          <i data-feather="headphones" class="w-5 h-5 ml-2 text-primary"></i>
+          نکات مهم
+        </h3>
+        <ul class="space-y-2 text-sm">
+          <li class="flex items-start">
+            <i data-feather="check-circle" class="w-4 h-4 text-primary ml-2 mt-1 flex-shrink-0"></i>
+            <span>حتماً از هدفون برای تجربه بهتر استفاده کنید</span>
+          </li>
+          <li class="flex items-start">
+            <i data-feather="check-circle" class="w-4 h-4 text-primary ml-2 mt-1 flex-shrink-0"></i>
+            <span>AudioContext به‌صورت خودکار هنگام بارگذاری صفحه ساخته می‌شود</span>
+          </li>
+          <li class="flex items-start">
+            <i data-feather="check-circle" class="w-4 h-4 text-primary ml-2 mt-1 flex-shrink-0"></i>
+            <span>سرعت چرخش بر حسب درجه بر ثانیه محاسبه می‌شود</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="bg-darkLight rounded-xl p-6 mb-8" data-aos="fade-up" data-aos-delay="200">
+      <h2 class="text-xl font-semibold mb-4 border-b border-red-800/30 pb-2 flex items-center">
+        <i data-feather="settings" class="w-5 h-5 ml-2 text-primary"></i>
+        تنظیمات پیشرفته
+      </h2>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 controls-grid">
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium mb-2 flex items-center justify-between">
+              <span>سرعت چرخش (درجه/ثانیه)</span>
+              <span id="speedVal" class="text-primary font-bold">45</span>
+            </label>
+            <input id="speed" type="range" min="0" max="360" value="45" class="w-full glowing-border">
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium mb-2 flex items-center justify-between">
+              <span>شعاع (فاصله منبع تا شنونده)</span>
+              <span id="radiusVal" class="text-primary font-bold">1</span>
+            </label>
+            <input id="radius" type="range" min="0.1" max="5" step="0.1" value="1" class="w-full glowing-border">
+          </div>
+        </div>
+
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium mb-2 flex items-center justify-between">
+              <span>ارتفاع منبع (Y)</span>
+              <span id="elevVal" class="text-primary font-bold">0</span>
+            </label>
+            <input id="elev" type="range" min="-2" max="2" step="0.1" value="0" class="w-full glowing-border">
+          </div>
+
+          <div class="flex flex-col space-y-3">
+            <label class="flex items-center cursor-pointer">
+              <div class="relative">
+                <input id="hrtf" type="checkbox" class="sr-only" checked>
+                <div class="block bg-gray-600 w-10 h-6 rounded-full"></div>
+                <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition transform translate-x-4"></div>
+              </div>
+              <div class="mr-3 text-sm">استفاده از HRTF (پیش‌فرض)</div>
+            </label>
+
+            <label class="flex items-center cursor-pointer">
+              <div class="relative">
+                <input id="reverb" type="checkbox" class="sr-only">
+                <div class="block bg-gray-600 w-10 h-6 rounded-full"></div>
+                <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition transform"></div>
+              </div>
+              <div class="mr-3 text-sm">افزودن ریورب شبیه‌سازی‌شده</div>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-darkLight rounded-xl p-6" data-aos="fade-up" data-aos-delay="300">
+      <h3 class="text-lg font-semibold mb-3 flex items-center">
+        <i data-feather="info" class="w-5 h-5 ml-2 text-primary"></i>
+        اطلاعات فنی
+      </h3>
+      <div class="bg-red-900/20 p-4 rounded-lg text-sm">
+        <p class="mb-2">این دمو از <code class="bg-red-800/30 px-1 py-0.5 rounded">PannerNode</code> با مدل HRTF برای شبیه‌سازی موقعیت سه‌بعدی صدا استفاده می‌کند.</p>
+        <p>ریورب با <code class="bg-red-800/30 px-1 py-0.5 rounded">ConvolverNode</code> و یک impulse ساخته شده تا حس «اتاق» ایجاد شود.</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // AOS
+    AOS.init({ duration: 800, once: true });
+    // Feather icons
+    feather.replace();
+
+    // Visualizer animation keyframes (تزئینی)
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes v1 { 0% { height: 10px; } 100% { height: 40px; } }
+      @keyframes v2 { 0% { height: 15px; } 100% { height: 50px; } }
+      @keyframes v3 { 0% { height: 20px; } 100% { height: 60px; } }
+      @keyframes v4 { 0% { height: 15px; } 100% { height: 45px; } }
+      @keyframes v5 { 0% { height: 10px; } 100% { height: 30px; } }
+    `;
+    document.head.appendChild(style);
+
+    // DOM refs
+    const speed = document.getElementById('speed');
+    const radius = document.getElementById('radius');
+    const elev = document.getElementById('elev');
+    const speedVal = document.getElementById('speedVal');
+    const radiusVal = document.getElementById('radiusVal');
+    const elevVal = document.getElementById('elevVal');
+
+    const playBtn = document.getElementById('playBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const hrtf = document.getElementById('hrtf');
+    const reverb = document.getElementById('reverb');
+
+    const fileInput = document.getElementById('file');
+    const fileName = document.getElementById('file-name');
+    const trackName = document.getElementById('track-name');
+    const trackSub = document.getElementById('track-sub');
+
+    const previewCover = document.getElementById('preview-cover');
+    const previewIcon = document.getElementById('preview-icon');
+    const previewTitle = document.getElementById('preview-title');
+    const previewArtist = document.getElementById('preview-artist');
+    const uploadEmpty = document.getElementById('upload-empty');
+    const uploadPreview = document.getElementById('upload-preview');
+
+    const progress = document.getElementById('progress');
+    const progressBar = document.getElementById('progressBar');
+    const progressHandle = document.getElementById('progressHandle');
+    const currentTimeEl = document.getElementById('currentTime');
+    const durationEl = document.getElementById('duration');
+    const visualizer = document.getElementById('visualizer');
+    const disc = document.getElementById('disc');
+    const coverArt = document.getElementById('cover-art');
+    const discIcon = document.getElementById('disc-icon');
+
+    // Audio vars
+    let audioCtx = null;
+    let buffer = null;
+    let source = null;
+    let panner = null;
+    let convolver = null;
+
+    let isPlaying = false;
+    let isPaused = false;
+    let startTime = 0;
+    let pauseOffset = 0;
+    let rotateReq = null;
+    let angle = 0;
+    let lastTime = null;
+    let progressInterval = null;
+
+    const setFeather = () => feather.replace();
+    const setButtonIcon = (btn, name, size='w-6 h-6') => { btn.innerHTML = `<i data-feather="${name}" class="${size}"></i>`; setFeather(); };
+    const formatTime = s => { s = Math.max(0, s); const m = Math.floor(s / 60); const sec = Math.floor(s % 60); return `${m}:${sec.toString().padStart(2,'0')}`; };
+
+    function updateRangeBackground(range) {
+      const value = (range.value - range.min) / (range.max - range.min) * 100;
+      range.style.backgroundSize = value + '% 100%';
+      range.style.backgroundPosition = 'right center';
+    }
+    speed.oninput = () => { speedVal.textContent = speed.value; updateRangeBackground(speed); };
+    radius.oninput = () => { radiusVal.textContent = radius.value; updateRangeBackground(radius); };
+    elev.oninput = () => { elevVal.textContent = elev.value; updateRangeBackground(elev); };
+    updateRangeBackground(speed); updateRangeBackground(radius); updateRangeBackground(elev);
+
+    // Toggle switches UI
+    function refreshToggleUI(el) {
+      const holder = el.parentElement;
+      const track = holder.querySelector('.block');
+      const dot = holder.querySelector('.dot');
+      if (!track || !dot) return;
+      if (el.checked) { track.classList.add('bg-primary'); dot.classList.add('translate-x-4'); }
+      else { track.classList.remove('bg-primary'); dot.classList.remove('translate-x-4'); }
+    }
+    document.querySelectorAll('input[type="checkbox"]').forEach(ch => {
+      ch.addEventListener('change', () => refreshToggleUI(ch));
+      refreshToggleUI(ch);
+    });
+
+    // Audio graph init on load (بدون استارت)
+    async function initAudioGraph() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      try { if (audioCtx.state === 'suspended') await audioCtx.resume(); } catch(e) {}
+      if (!panner) {
+        panner = audioCtx.createPanner();
+        panner.panningModel = hrtf.checked ? 'HRTF' : 'equalpower';
+        panner.distanceModel = 'inverse';
+        panner.refDistance = 1;
+        panner.maxDistance = 10000;
+        panner.rolloffFactor = 1;
+        setPannerPosition(0,0,-1);
+      }
+      if (!convolver) {
+        convolver = audioCtx.createConvolver();
+        convolver.buffer = makeImpulseResponse(audioCtx, 2, 2.0);
+      }
+    }
+
+    // Unlock روی اولین جسچر
+    ['click','touchstart','keydown'].forEach(ev=>{
+      window.addEventListener(ev, () => { if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume(); }, { passive: true, once: true });
+    });
+
+    window.addEventListener('load', async () => {
+      await initAudioGraph();
+    });
+
+    // File input handler
+    fileInput.onchange = async (e) => {
+      const f = e.target.files[0];
+      if (!f) return;
+
+      await initAudioGraph();
+      if (isPlaying) stopPlayback();
+
+      // نمایش در باکس آپلود + متادیتا
+      uploadEmpty.classList.add('hidden');
+      uploadPreview.classList.remove('hidden');
+      fileName.textContent = f.name;
+
+      const mm = window.musicMetadata;
+      let title = f.name.replace(/\.[^/.]+$/, "");
+      let artist = '';
+      let coverURL = null;
+      try {
+        if (mm && mm.parseBlob) {
+          const meta = await mm.parseBlob(f);
+          if (meta && meta.common) {
+            if (meta.common.title) title = meta.common.title;
+            if (meta.common.artist) artist = meta.common.artist;
+            if (meta.common.picture && meta.common.picture.length > 0) {
+              const pic = meta.common.picture[0];
+              const blob = new Blob([pic.data], { type: pic.format || 'image/jpeg' });
+              coverURL = URL.createObjectURL(blob);
+            }
+          }
+        }
+      } catch(err) { console.warn('Metadata parsing failed:', err); }
+
+      trackName.textContent = title;
+      trackSub.textContent = artist || f.name;
+
+      if (coverURL) {
+        coverArt.src = coverURL; coverArt.classList.remove('hidden'); discIcon.classList.add('hidden');
+        previewCover.src = coverURL; previewCover.classList.remove('hidden'); previewIcon.classList.add('hidden');
+      } else {
+        coverArt.classList.add('hidden'); discIcon.classList.remove('hidden');
+        previewCover.classList.add('hidden'); previewIcon.classList.remove('hidden');
+      }
+
+      previewTitle.textContent = title;
+      previewArtist.textContent = artist || '—';
+
+      const arr = await f.arrayBuffer();
+      buffer = await audioCtx.decodeAudioData(arr);
+
+      durationEl.textContent = formatTime(buffer.duration);
+      playBtn.disabled = false;
+      stopBtn.disabled = false;
+      downloadBtn.disabled = false;
+      pauseOffset = 0;
+    };
+
+    // Play/Pause toggle
+    playBtn.onclick = async () => {
+      await initAudioGraph();
+      if (!buffer) { alert('یک فایل صوتی بارگذاری کن.'); return; }
+      if (!isPlaying) startPlayback(pauseOffset);
+      else pausePlayback();
+    };
+
+    stopBtn.onclick = () => { stopPlayback(); };
+
+    hrtf.onchange = () => { if (panner) panner.panningModel = hrtf.checked ? 'HRTF' : 'equalpower'; refreshToggleUI(hrtf); };
+    reverb.onchange = () => { refreshToggleUI(reverb); if (isPlaying) toggleReverbConnection(reverb.checked); };
+
+    // دانلود خروجی 3D
+    downloadBtn.onclick = async () => {
+      try { await render3DAndDownload(); }
+      catch (e) { console.error(e); alert('مشکلی در رندر 3D پیش آمد.'); }
+    };
+
+    function startPlayback(offset = 0) {
+      if (!audioCtx || !buffer) return;
+      cleanupSource();
+
+      source = audioCtx.createBufferSource();
+      source.buffer = buffer;
+      source.loop = true;
+
+      toggleReverbConnection(reverb.checked);
+      panner.connect(audioCtx.destination);
+
+      source.start(0, offset % buffer.duration);
+
+      isPlaying = true; isPaused = false;
+      startTime = audioCtx.currentTime - offset;
+      lastTime = performance.now();
+      angle = 0;
+
+      setButtonIcon(playBtn, 'pause', 'w-6 h-6');
+      disc.classList.remove('rotating-paused');
+
+      rotateReq = requestAnimationFrame(rotateStep);
+      startProgressUpdater();
+    }
+
+    function pausePlayback() {
+      if (!isPlaying) return;
+      pauseOffset = (audioCtx.currentTime - startTime) % buffer.duration;
+      cleanupSource();
+      isPlaying = false;
+      isPaused = true;
+      setButtonIcon(playBtn, 'play', 'w-6 h-6');
+      // اکولایزر فعال می‌ماند؛ فقط دیسک می‌ایستد
+      disc.classList.add('rotating-paused');
+    }
+
+    function stopPlayback() {
+      cleanupSource();
+      isPlaying = false;
+      isPaused = false;
+      pauseOffset = 0;
+      startTime = 0;
+      setButtonIcon(playBtn, 'play', 'w-6 h-6');
+      progress.style.width = '0%';
+      progressHandle.style.left = '0%';
+      currentTimeEl.textContent = '0:00';
+      disc.classList.add('rotating-paused');
+    }
+
+    function cleanupSource() {
+      if (source) { try { source.stop(0); } catch(e){} try { source.disconnect(); } catch(e){} source = null; }
+      if (panner) try { panner.disconnect(); } catch(e){}
+      if (convolver) try { convolver.disconnect(); } catch(e){}
+      if (rotateReq) cancelAnimationFrame(rotateReq);
+      stopProgressUpdater(true);
+    }
+
+    function rotateStep(now) {
+      const spdDegPerSec = Number(speed.value);
+      const dt = (now - lastTime)/1000; lastTime = now;
+      angle = (angle + spdDegPerSec * dt) % 360;
+      const rad = angle * Math.PI/180;
+      const r = Number(radius.value);
+      const y = Number(elev.value);
+      const x = Math.cos(rad) * r;
+      const z = Math.sin(rad) * r * -1;
+      setPannerPosition(x,y,z);
+      rotateReq = requestAnimationFrame(rotateStep);
+    }
+
+    function setPannerPosition(x,y,z) {
+      if (!panner) return;
+      if (typeof panner.positionX !== 'undefined') {
+        try { panner.positionX.value = x; panner.positionY.value = y; panner.positionZ.value = z; }
+        catch(e){ if (typeof panner.setPosition==='function') panner.setPosition(x,y,z); }
+      } else if (typeof panner.setPosition === 'function') {
+        panner.setPosition(x,y,z);
+      } else {
+        console.warn('پوزیشن‌دهی پَنر در این مرورگر نیمه‌پشتیبانی است');
+      }
+    }
+
+    function toggleReverbConnection(enable) {
+      if (!source || !panner) return;
+      try { source.disconnect(); } catch(e){}
+      if (convolver) try { convolver.disconnect(); } catch(e){}
+      if (enable) { source.connect(convolver); convolver.connect(panner); }
+      else { source.connect(panner); }
+    }
+
+    function startProgressUpdater() {
+      stopProgressUpdater(true);
+      progressInterval = setInterval(() => {
+        const t = (audioCtx.currentTime - startTime) % buffer.duration;
+        const percent = (t / buffer.duration) * 100;
+        progress.style.width = percent + '%';
+        progressHandle.style.left = percent + '%';
+        currentTimeEl.textContent = formatTime(t);
+      }, 100);
+    }
+    function stopProgressUpdater() {
+      if (progressInterval) { clearInterval(progressInterval); progressInterval = null; }
+    }
+
+    // Seek by progress bar with RTL-aware mapping
+    function percentFromEvent(e, el) {
+      const rect = el.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : (e.changedTouches ? e.changedTouches[0].clientX : e.clientX);
+      let x = Math.min(Math.max(clientX - rect.left, 0), rect.width);
+      let percent = x / rect.width;
+      const isRTL = getComputedStyle(el).direction === 'rtl' || getComputedStyle(document.documentElement).direction === 'rtl';
+      if (isRTL) percent = 1 - percent;
+      return percent;
+    }
+
+    const onScrubMove = (e) => {
+      if (!buffer) return;
+      const percent = percentFromEvent(e, progressBar);
+      const newTime = percent * buffer.duration;
+      progress.style.width = (percent*100) + '%';
+      progressHandle.style.left = (percent*100) + '%';
+      currentTimeEl.textContent = formatTime(newTime);
+    };
+    const onScrubEnd = (e) => {
+      if (!buffer) return;
+      const percent = percentFromEvent(e, progressBar);
+      const newTime = percent * buffer.duration;
+      pauseOffset = newTime;
+      if (isPlaying) startPlayback(pauseOffset);
+      progressBar.classList.remove('scrubbing');
+      window.removeEventListener('mousemove', onScrubMove);
+      window.removeEventListener('mouseup', onScrubEnd);
+      window.removeEventListener('touchmove', onScrubMove);
+      window.removeEventListener('touchend', onScrubEnd);
+    };
+    progressBar.addEventListener('mousedown', (e) => {
+      if (!buffer) return;
+      progressBar.classList.add('scrubbing');
+      onScrubMove(e);
+      window.addEventListener('mousemove', onScrubMove);
+      window.addEventListener('mouseup', onScrubEnd);
+    });
+    progressBar.addEventListener('touchstart', (e) => {
+      if (!buffer) return;
+      progressBar.classList.add('scrubbing');
+      onScrubMove(e);
+      window.addEventListener('touchmove', onScrubMove, { passive: true });
+      window.addEventListener('touchend', onScrubEnd);
+    }, { passive: true });
+
+    // Impulse response gen
+    function makeImpulseResponse(context, durationSec = 2, decay = 2.0){
+      const rate = context.sampleRate;
+      const len = Math.floor(rate * durationSec);
+      const impulse = context.createBuffer(2, len, rate);
+      for(let ch=0; ch<2; ch++){
+        const data = impulse.getChannelData(ch);
+        for(let i=0;i<len;i++){
+          const n = (Math.random() * 2 - 1);
+          data[i] = n * Math.pow(1 - i/len, decay);
+        }
+      }
+      return impulse;
+    }
+
+    // Offline render 3D & download WAV
+    async function render3DAndDownload() {
+      if (!buffer) { alert('ابتدا یک فایل بارگذاری کنید.'); return; }
+      const sr = audioCtx ? audioCtx.sampleRate : 44100;
+      const length = Math.ceil(buffer.duration * sr);
+      const off = new OfflineAudioContext(2, length, sr);
+
+      const oSrc = off.createBufferSource();
+      oSrc.buffer = buffer;
+      oSrc.loop = false;
+
+      const oPanner = off.createPanner();
+      oPanner.panningModel = hrtf.checked ? 'HRTF' : 'equalpower';
+      oPanner.distanceModel = 'inverse';
+      oPanner.refDistance = 1;
+      oPanner.maxDistance = 10000;
+      oPanner.rolloffFactor = 1;
+
+      let oConvolver = null;
+      if (reverb.checked) {
+        oConvolver = off.createConvolver();
+        oConvolver.buffer = makeImpulseResponse(off, 2, 2.0);
+      }
+
+      if (reverb.checked) { oSrc.connect(oConvolver); oConvolver.connect(oPanner); }
+      else { oSrc.connect(oPanner); }
+      oPanner.connect(off.destination);
+
+      // Rotation automation
+      const spd = Number(speed.value);
+      const r = Number(radius.value);
+      const y = Number(elev.value);
+      if (typeof oPanner.positionX !== 'undefined') {
+        const step = 1/60;
+        for (let t=0; t<=buffer.duration; t+=step) {
+          const ang = (spd * t) % 360;
+          const rad = ang * Math.PI/180;
+          const x = Math.cos(rad) * r;
+          const z = Math.sin(rad) * r * -1;
+          oPanner.positionX.setValueAtTime(x, t);
+          oPanner.positionY.setValueAtTime(y, t);
+          oPanner.positionZ.setValueAtTime(z, t);
+        }
+      } else if (typeof oPanner.setPosition === 'function') {
+        const points = 200;
+        for (let i=0;i<=points;i++){
+          const t = (i/points)*buffer.duration;
+          const ang = (spd * t) % 360;
+          const rad = ang * Math.PI/180;
+          const x = Math.cos(rad) * r;
+          const z = Math.sin(rad) * r * -1;
+          oPanner.setPosition(x,y,z);
+        }
+      }
+
+      oSrc.start(0);
+      const rendered = await off.startRendering();
+      const wavBlob = encodeWAV(rendered);
+      const url = URL.createObjectURL(wavBlob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = (trackName.textContent || 'binaural') + ' [3D].wav';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 0);
+    }
+
+    // Encode Float32 AudioBuffer to WAV (16-bit PCM)
+    function encodeWAV(audioBuffer) {
+      const numCh = 2;
+      const sr = audioBuffer.sampleRate;
+      const len = audioBuffer.length;
+      const chData = []; for (let ch=0; ch<numCh; ch++) chData.push(audioBuffer.getChannelData(ch));
+
+      const interleaved = new Float32Array(len * numCh);
+      for (let i=0; i<len; i++) for (let ch=0; ch<numCh; ch++) interleaved[i*numCh + ch] = chData[ch][i];
+
+      const buffer = new ArrayBuffer(44 + interleaved.length * 2);
+      const view = new DataView(buffer);
+
+      writeString(view, 0, 'RIFF');
+      view.setUint32(4, 36 + interleaved.length * 2, true);
+      writeString(view, 8, 'WAVE');
+      writeString(view, 12, 'fmt ');
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, numCh, true);
+      view.setUint32(24, sr, true);
+      view.setUint32(28, sr * numCh * 2, true);
+      view.setUint16(32, numCh * 2, true);
+      view.setUint16(34, 16, true);
+      writeString(view, 36, 'data');
+      view.setUint32(40, interleaved.length * 2, true);
+
+      let offset = 44;
+      for (let i=0; i<interleaved.length; i++) {
+        let s = Math.max(-1, Math.min(1, interleaved[i]));
+        view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+        offset += 2;
+      }
+
+      return new Blob([view], { type: 'audio/wav' });
+
+      function writeString(dataview, offset, str) {
+        for (let i=0; i<str.length; i++) dataview.setUint8(offset+i, str.charCodeAt(i));
+      }
+    }
+
+    // Safety: close on unload
+    window.addEventListener('beforeunload', () => {
+      if(audioCtx && typeof audioCtx.close === 'function') audioCtx.close();
+    });
+  </script>
+
+  <script>
+    // Visualizer keyframes (تزئینی)
+    const style2 = document.createElement('style');
+    style2.textContent = `
+      @keyframes v1 { 0% { height: 10px; } 100% { height: 40px; } }
+      @keyframes v2 { 0% { height: 15px; } 100% { height: 50px; } }
+      @keyframes v3 { 0% { height: 20px; } 100% { height: 60px; } }
+      @keyframes v4 { 0% { height: 15px; } 100% { height: 45px; } }
+      @keyframes v5 { 0% { height: 10px; } 100% { height: 30px; } }
+    `;
+    document.head.appendChild(style2);
+  </script>
+</body>
+</html>
+
